@@ -149,3 +149,57 @@ class TaskExecutionLog(BaseModel):
     message: str
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     context: Optional[Dict[str, Any]] = None
+
+
+class GoalStatus(str, Enum):
+    """目标状态枚举"""
+    PENDING = "pending"      # 待处理
+    IN_PROGRESS = "in_progress"  # 进行中
+    COMPLETED = "completed"  # 已完成
+    FAILED = "failed"        # 失败
+    CANCELLED = "cancelled"  # 已取消
+
+
+class UserGoal(BaseModel):
+    """用户目标模型"""
+    goal_id: str = Field(default_factory=lambda: str(uuid4()))
+    title: str
+    description: str
+    status: GoalStatus = GoalStatus.PENDING
+    
+    # 关联的任务
+    tasks: List[str] = []  # 关联的任务ID列表
+    
+    # 目标分解
+    sub_goals: List[str] = []  # 子目标ID列表
+    parent_goal: Optional[str] = None  # 父目标ID
+    
+    # 时间信息
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    target_completion_date: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    
+    # 优先级和分类
+    priority: TaskPriority = TaskPriority.NORMAL
+    category: Optional[str] = None
+    tags: List[str] = []
+    
+    # 进度信息
+    progress_percentage: float = 0.0
+    estimated_effort: Optional[int] = None  # 预估工作量（小时）
+    actual_effort: Optional[int] = None     # 实际工作量（小时）
+    
+    # 元数据
+    metadata: Dict[str, Any] = {}
+    
+    class Config:
+        use_enum_values = True
+
+
+class GoalDependency(BaseModel):
+    """目标依赖关系"""
+    goal_id: str
+    dependency_id: str
+    dependency_type: str = "required"  # required, optional, conditional
+    created_at: datetime = Field(default_factory=datetime.utcnow)
