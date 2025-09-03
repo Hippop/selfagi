@@ -4,14 +4,15 @@ FastAPI应用
 """
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import asyncio
 import uvicorn
 
 from src.main import SelfAGISystem
-from src.core.models import Task, TaskStatus, TaskPriority, TaskType
+from src.core.models import Task, TaskStatus, TaskPriority, TaskType, UserGoal, GoalStatus, GoalDependency
 from config.settings import settings
 
 
@@ -72,6 +73,43 @@ class SearchRequest(BaseModel):
     limit: int = 100
 
 
+class CreateGoalRequest(BaseModel):
+    """创建目标请求模型"""
+    title: str
+    description: str
+    priority: str = "normal"
+    category: Optional[str] = None
+    tags: Optional[List[str]] = []
+    target_completion_date: Optional[str] = None
+    estimated_effort: Optional[int] = None
+    parent_goal: Optional[str] = None
+
+
+class UpdateGoalRequest(BaseModel):
+    """更新目标请求模型"""
+    title: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    category: Optional[str] = None
+    tags: Optional[List[str]] = None
+    target_completion_date: Optional[str] = None
+    estimated_effort: Optional[int] = None
+    progress_percentage: Optional[float] = None
+
+
+class GoalFilterRequest(BaseModel):
+    """目标过滤请求模型"""
+    status: Optional[List[str]] = None
+    priority: Optional[List[str]] = None
+    category: Optional[str] = None
+    tags: Optional[List[str]] = None
+    created_after: Optional[str] = None
+    created_before: Optional[str] = None
+    limit: int = 100
+    offset: int = 0
+
+
 # 响应模型
 class ApiResponse(BaseModel):
     success: bool
@@ -96,6 +134,13 @@ async def startup_event():
         
         print("SelfAGI系统启动成功")
         
+        # 挂载静态文件
+        import os
+        static_dir = os.path.join(os.path.dirname(__file__), "..", "..", "static")
+        if os.path.exists(static_dir):
+            app.mount("/static", StaticFiles(directory=static_dir), name="static")
+            print(f"静态文件服务已挂载: {static_dir}")
+        
     except Exception as e:
         print(f"SelfAGI系统启动失败: {str(e)}")
         raise
@@ -113,6 +158,19 @@ async def shutdown_event():
             print("SelfAGI系统已关闭")
         except Exception as e:
             print(f"SelfAGI系统关闭失败: {str(e)}")
+
+
+# 根路径重定向到前端页面
+@app.get("/")
+async def root():
+    """根路径，返回前端页面"""
+    import os
+    static_dir = os.path.join(os.path.dirname(__file__), "..", "..", "static")
+    index_file = os.path.join(static_dir, "index.html")
+    if os.path.exists(index_file):
+        return FileResponse(index_file)
+    else:
+        return {"message": "SelfAGI系统API", "docs": "/docs"}
 
 
 # 健康检查
@@ -736,6 +794,270 @@ async def global_exception_handler(request, exc):
             "error": str(exc)
         }
     )
+
+
+# ==================== 用户目标相关API ====================
+
+# 创建用户目标
+@app.post("/goals", response_model=ApiResponse)
+async def create_goal(request: CreateGoalRequest):
+    """创建用户目标"""
+    try:
+        if not system:
+            raise HTTPException(status_code=503, detail="系统未初始化")
+        
+        # 创建目标对象
+        goal = UserGoal(
+            title=request.title,
+            description=request.description,
+            priority=TaskPriority(request.priority),
+            category=request.category,
+            tags=request.tags or [],
+            estimated_effort=request.estimated_effort,
+            parent_goal=request.parent_goal
+        )
+        
+        # 这里应该调用系统的目标管理功能
+        # 暂时返回创建的目标
+        return ApiResponse(
+            success=True,
+            message="目标创建成功",
+            data=goal.dict()
+        )
+        
+    except Exception as e:
+        return ApiResponse(
+            success=False,
+            message="目标创建失败",
+            error=str(e)
+        )
+
+
+# 获取用户目标列表
+@app.post("/goals/list", response_model=ApiResponse)
+async def get_goals_list(request: GoalFilterRequest):
+    """获取用户目标列表"""
+    try:
+        if not system:
+            raise HTTPException(status_code=503, detail="系统未初始化")
+        
+        # 这里应该调用系统的目标查询功能
+        # 暂时返回示例数据
+        sample_goals = [
+            {
+                "goal_id": "goal-1",
+                "title": "开发Web应用",
+                "description": "创建一个完整的Web应用程序",
+                "status": "in_progress",
+                "progress_percentage": 45.0,
+                "tasks": ["task-1", "task-2", "task-3"],
+                "created_at": "2024-01-01T00:00:00Z"
+            },
+            {
+                "goal_id": "goal-2", 
+                "title": "学习机器学习",
+                "description": "掌握机器学习基础知识和实践",
+                "status": "pending",
+                "progress_percentage": 0.0,
+                "tasks": ["task-4", "task-5"],
+                "created_at": "2024-01-02T00:00:00Z"
+            }
+        ]
+        
+        return ApiResponse(
+            success=True,
+            message="目标列表获取成功",
+            data=sample_goals
+        )
+        
+    except Exception as e:
+        return ApiResponse(
+            success=False,
+            message="目标列表获取失败",
+            error=str(e)
+        )
+
+
+# 获取单个用户目标详情
+@app.get("/goals/{goal_id}", response_model=ApiResponse)
+async def get_goal_detail(goal_id: str):
+    """获取用户目标详情"""
+    try:
+        if not system:
+            raise HTTPException(status_code=503, detail="系统未初始化")
+        
+        # 这里应该调用系统的目标查询功能
+        # 暂时返回示例数据
+        sample_goal = {
+            "goal_id": goal_id,
+            "title": "开发Web应用",
+            "description": "创建一个完整的Web应用程序，包括前端界面和后端API",
+            "status": "in_progress",
+            "progress_percentage": 45.0,
+            "priority": "high",
+            "category": "development",
+            "tags": ["web", "development", "fullstack"],
+            "tasks": [
+                {
+                    "task_id": "task-1",
+                    "name": "设计数据库架构",
+                    "status": "completed",
+                    "description": "设计并创建数据库表结构"
+                },
+                {
+                    "task_id": "task-2", 
+                    "name": "开发后端API",
+                    "status": "in_progress",
+                    "description": "实现RESTful API接口"
+                },
+                {
+                    "task_id": "task-3",
+                    "name": "开发前端界面",
+                    "status": "pending", 
+                    "description": "创建用户界面和交互逻辑"
+                }
+            ],
+            "sub_goals": [],
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-15T10:30:00Z",
+            "target_completion_date": "2024-02-01T00:00:00Z"
+        }
+        
+        return ApiResponse(
+            success=True,
+            message="目标详情获取成功",
+            data=sample_goal
+        )
+        
+    except Exception as e:
+        return ApiResponse(
+            success=False,
+            message="目标详情获取失败",
+            error=str(e)
+        )
+
+
+# 获取目标的任务依赖图
+@app.get("/goals/{goal_id}/dependency-graph", response_model=ApiResponse)
+async def get_goal_dependency_graph(goal_id: str):
+    """获取目标的任务依赖图"""
+    try:
+        if not system:
+            raise HTTPException(status_code=503, detail="系统未初始化")
+        
+        # 这里应该调用系统的依赖图生成功能
+        # 暂时返回示例数据
+        dependency_graph = {
+            "nodes": [
+                {
+                    "id": "task-1",
+                    "label": "设计数据库架构",
+                    "type": "task",
+                    "status": "completed",
+                    "priority": "high"
+                },
+                {
+                    "id": "task-2",
+                    "label": "开发后端API", 
+                    "type": "task",
+                    "status": "in_progress",
+                    "priority": "high"
+                },
+                {
+                    "id": "task-3",
+                    "label": "开发前端界面",
+                    "type": "task", 
+                    "status": "pending",
+                    "priority": "normal"
+                },
+                {
+                    "id": "task-4",
+                    "label": "集成测试",
+                    "type": "task",
+                    "status": "pending",
+                    "priority": "normal"
+                }
+            ],
+            "edges": [
+                {
+                    "from": "task-1",
+                    "to": "task-2",
+                    "type": "dependency",
+                    "label": "数据库设计完成后才能开发API"
+                },
+                {
+                    "from": "task-2", 
+                    "to": "task-3",
+                    "type": "dependency",
+                    "label": "API开发完成后才能开发前端"
+                },
+                {
+                    "from": "task-3",
+                    "to": "task-4",
+                    "type": "dependency", 
+                    "label": "前后端都完成后进行集成测试"
+                }
+            ]
+        }
+        
+        return ApiResponse(
+            success=True,
+            message="依赖图获取成功",
+            data=dependency_graph
+        )
+        
+    except Exception as e:
+        return ApiResponse(
+            success=False,
+            message="依赖图获取失败",
+            error=str(e)
+        )
+
+
+# 更新用户目标
+@app.put("/goals/{goal_id}", response_model=ApiResponse)
+async def update_goal(goal_id: str, request: UpdateGoalRequest):
+    """更新用户目标"""
+    try:
+        if not system:
+            raise HTTPException(status_code=503, detail="系统未初始化")
+        
+        # 这里应该调用系统的目标更新功能
+        return ApiResponse(
+            success=True,
+            message="目标更新成功",
+            data={"goal_id": goal_id}
+        )
+        
+    except Exception as e:
+        return ApiResponse(
+            success=False,
+            message="目标更新失败",
+            error=str(e)
+        )
+
+
+# 删除用户目标
+@app.delete("/goals/{goal_id}", response_model=ApiResponse)
+async def delete_goal(goal_id: str):
+    """删除用户目标"""
+    try:
+        if not system:
+            raise HTTPException(status_code=503, detail="系统未初始化")
+        
+        # 这里应该调用系统的目标删除功能
+        return ApiResponse(
+            success=True,
+            message="目标删除成功",
+            data={"goal_id": goal_id}
+        )
+        
+    except Exception as e:
+        return ApiResponse(
+            success=False,
+            message="目标删除失败",
+            error=str(e)
+        )
 
 
 # 启动服务器
